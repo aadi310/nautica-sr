@@ -1,12 +1,18 @@
 "use client";
 
 /**
- * NAUTICA x RDEP: Smart receipt, "Navy & Sail"
+ * NAUTICA x RDEP: Smart receipt, "Navy & Sail" (revision 2)
  *
  * Keeps every section of the current Nautica receipt (header with name + QR, invoice / date / total paid,
  * purchase summary, History / Email / Download, rating, profile, exchange, reach us, store finder, store
- * details, registered office) and adds what the Mango and NEXT receipts have: tier chip, coupons,
- * Nautica Club card, video, floating dock, Directions / Call store, copy-code buttons.
+ * details, registered office) and adds what the Mango and NEXT receipts have: tier chip, coupons, Nautica
+ * Club card, video, floating dock, Directions / Call store, copy-code buttons.
+ *
+ * Revision 2
+ *  - Items: each item is one tappable row (square size badge, name, qty, discount tag, net amount) that
+ *    opens a ruled details panel (SKU, HSN, UoM, unit price, discount % and amount).
+ *  - Store details: expand / collapse for contact and tax info, like the Mango and NEXT receipts.
+ *  - Total paid no longer repeats inside the payment stub.
  *
  * Thinking behind it
  *  - Brand colour #13406F carries the page. A deeper navy, sail white and sea-mist tints are shades of it.
@@ -234,7 +240,7 @@ export interface NauticaReceiptProps {
 
 type IconName =
   | "history" | "mail" | "download" | "phone" | "instagram" | "pin"
-  | "close" | "check" | "arrow" | "chevron" | "user" | "directions" | "call"
+  | "close" | "check" | "arrow" | "chevron" | "user" | "tax" | "directions" | "call"
   | "star" | "ticket" | "qr" | "card" | "anchor";
 type ModalId = "history" | "email" | "qr" | null;
 
@@ -371,6 +377,7 @@ const SAMPLE_COMMON = {
     address: "62, Upper Ground floor, Phoenix Marketcity, Karnataka",
     email: "rema@proenx.com",
     phone: "9790258564",
+    gstin: "29AAOCR0097H1Z4",
     associate: "Virat",
   },
   registeredOffice:
@@ -437,6 +444,7 @@ const PATHS: Record<IconName, ReactNode> = {
   instagram: (<><rect x="3" y="3" width="18" height="18" rx="4" /><circle cx="12" cy="12" r="4" /><path d="M17.5 6.5h.01" /></>),
   pin: (<><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0Z" /><circle cx="12" cy="10" r="3" /></>),
   user: (<><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></>),
+  tax: (<><rect x="3" y="4" width="18" height="16" /><path d="M7 8h10M7 12h10M7 16h6" /></>),
   directions: <path d="M9 18l6-6-6-6" />,
   star: <path d={STAR_PATH} />,
   ticket: (<><path d="M3 9a2 2 0 0 0 0 6v3a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-3a2 2 0 0 1 0-6V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1z" /><path d="M9 9h6M9 12h6M9 15h3" /></>),
@@ -683,34 +691,73 @@ function Modal({ title, onClose, scale, children }: { title: string; onClose: ()
   );
 }
 
-/* ------------------------------ item row (manifest line) ------------------------- */
-const MANIFEST_COLS = "grid-cols-[minmax(0,1fr)_92px_88px]";
-
-function ItemRow({ item }: { item: NauticaItem }) {
+/* ------------------------------ item row (tap to open details) ------------------- */
+function ItemRow({ item, open, onToggle }: { item: NauticaItem; open: boolean; onToggle: () => void }) {
+  const panelId = useId();
   const net = netOf(item);
   const gross = item.mrp * item.qty;
   const pct = gross > 0 ? (item.discount / gross) * 100 : 0;
   return (
     <li className="border-t border-[var(--nt-line)] first:border-t-0">
-      <div className={`grid ${MANIFEST_COLS} items-start gap-x-3 px-5 py-4`}>
-        <div className="min-w-0">
-          <p className="nt-bold text-[14px] uppercase leading-snug tracking-[0.03em] text-[var(--nt-ink)]">{item.name}</p>
-          <div className={`mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 ${T_SMALL}`}>
-            <span className="nt-bold border border-[var(--nt-navy)] px-1.5 py-0.5 uppercase tracking-[0.1em] text-[var(--nt-navy)]">Size {item.size}</span>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className={`grid w-full grid-cols-[44px_minmax(0,1fr)_auto] items-start gap-x-3 px-5 py-4 text-left ${focusRing}`}
+      >
+        <span aria-label={`Size ${item.size}`} className="nt-bold grid h-11 w-11 place-items-center bg-[var(--nt-navy)] text-[14px] text-white">
+          {item.size}
+        </span>
+        <span className="min-w-0">
+          <span className="nt-bold block text-[14px] uppercase leading-snug tracking-[0.03em] text-[var(--nt-ink)]">{item.name}</span>
+          <span className={`mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 ${T_SMALL} text-[var(--nt-slate)]`}>
+            <span>Qty {item.qty}</span>
             {pct > 0 && <span className="nt-bold bg-[var(--nt-signal)] px-1.5 py-0.5 text-white">{pctText(pct)}% off</span>}
-          </div>
-          <dl className={`mt-2.5 space-y-0.5 ${T_SMALL} text-[var(--nt-mid)]`}>
-            <div className="flex gap-1.5"><dt>SKU</dt><dd className="tabular-nums text-[var(--nt-slate)]">{item.sku}</dd></div>
-            <div className="flex gap-1.5"><dt>HSN</dt><dd className="tabular-nums text-[var(--nt-slate)]">{item.hsn}</dd></div>
+            <span className="nt-bold flex items-center gap-1 text-[var(--nt-navy)]">
+              Details
+              <Icon name="chevron" className={`h-3.5 w-3.5 transition-transform duration-300 ${open ? "rotate-180" : ""}`} />
+            </span>
+          </span>
+        </span>
+        <span className="text-right">
+          <span className={`${T_AMOUNT} block text-[var(--nt-navy)]`}>₹{inr(net)}</span>
+          {item.discount > 0 && <s className={`mt-0.5 block ${T_SMALL} tabular-nums text-[var(--nt-mid)]`}>₹{inr(gross)}</s>}
+        </span>
+      </button>
+
+      <Collapse open={open} id={panelId}>
+        <div className="mx-5 mb-4 border border-[var(--nt-line)]">
+          <dl className="grid grid-cols-3 divide-x divide-[var(--nt-line)]">
+            {(
+              [
+                ["SKU", item.sku],
+                ["HSN", item.hsn],
+                ["UoM", "Pcs"],
+              ] as [string, string][]
+            ).map(([k, v]) => (
+              <div key={k} className="min-w-0 p-3">
+                <dt className={`${T_CAPS} text-[var(--nt-slate)]`}>{k}</dt>
+                <dd className={`${T_LABEL} mt-1 break-words tabular-nums text-[var(--nt-ink)]`}>{v}</dd>
+              </div>
+            ))}
+          </dl>
+          <dl className="grid grid-cols-3 divide-x divide-[var(--nt-line)] border-t border-[var(--nt-line)]">
+            {(
+              [
+                ["Unit price", `₹${inr(item.mrp)}`],
+                ["Discount", `${pctText(pct)}%`],
+                ["Amount", `₹${trim(item.discount)}`],
+              ] as [string, string][]
+            ).map(([k, v]) => (
+              <div key={k} className="min-w-0 p-3">
+                <dt className={`${T_CAPS} text-[var(--nt-slate)]`}>{k}</dt>
+                <dd className={`${T_LABEL} mt-1 break-words tabular-nums text-[var(--nt-ink)]`}>{v}</dd>
+              </div>
+            ))}
           </dl>
         </div>
-        <div>
-          <p className={`${T_AMOUNT} text-[var(--nt-ink)]`}>₹{inr(item.mrp)}</p>
-          <p className={`mt-1 ${T_SMALL} text-[var(--nt-mid)]`}>Qty {item.qty}</p>
-          {item.discount > 0 && <p className={`${T_SMALL} tabular-nums text-[var(--nt-slate)]`}>Disc −₹{trim(item.discount)}</p>}
-        </div>
-        <p className={`${T_AMOUNT} text-right text-[var(--nt-navy)]`}>₹{inr(net)}</p>
-      </div>
+      </Collapse>
     </li>
   );
 }
@@ -1327,14 +1374,17 @@ function ReceiptView({
   onSaveProfile,
   onSubmitFeedback,
 }: ReceiptViewProps) {
+  const [openItem, setOpenItem] = useState(-1);
   const [modal, setModal] = useState<ModalId>(null);
   const [exchangeOpen, setExchangeOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [sentTo, setSentTo] = useState("");
   const [emailErr, setEmailErr] = useState("");
   const [passed, setPassed] = useState(false);
   const closeModal = useCallback(() => setModal(null), []);
   const exchangeId = useId();
+  const contactId = useId();
   const clubRef = useRef<HTMLElement>(null);
   const actionsRef = useRef<HTMLDivElement>(null);
   const footerRef = useRef<HTMLElement>(null);
@@ -1465,15 +1515,9 @@ function ReceiptView({
               </p>
             </div>
 
-            <div aria-hidden="true" className={`grid ${MANIFEST_COLS} gap-x-3 border-b border-[var(--nt-line)] bg-[var(--nt-wash)] px-5 py-2 ${T_CAPS} text-[var(--nt-navy)]`}>
-              <span>Item</span>
-              <span>Unit price</span>
-              <span className="text-right">Net amount</span>
-            </div>
-
             <ul aria-label="Items purchased">
               {data.items.map((item, i) => (
-                <ItemRow key={`${item.sku}-${i}`} item={item} />
+                <ItemRow key={`${item.sku}-${i}`} item={item} open={openItem === i} onToggle={() => setOpenItem(openItem === i ? -1 : i)} />
               ))}
             </ul>
 
@@ -1498,20 +1542,17 @@ function ReceiptView({
               <p className={`${T_BIG} nt-bold text-[var(--nt-navy)]`}>₹{inr(t.total)}</p>
             </div>
 
-            {/* payment stub */}
+            {/* payment stub: method and reference only, the total is already above */}
             <div className="nt-grain relative mx-5 mb-5 overflow-hidden bg-[var(--nt-navy)] p-4 text-white" style={{ backgroundImage: "radial-gradient(120% 160% at 100% 0%, #1D5A97 0%, #13406F 60%)" }}>
               <Waves lines={3} gap={12} className="pointer-events-none absolute inset-x-0 bottom-0 h-12 w-full" />
               <p className={`relative ${T_CAPS} text-[var(--nt-fog)]`}>Payment method</p>
-              <div className="relative mt-2.5 flex items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="grid h-10 w-10 shrink-0 place-items-center bg-white/15">
-                    <Icon name="card" className="h-5 w-5" />
-                  </span>
-                  <p className={`${T_LABEL} truncate`}>
-                    {data.payment.mode} &ndash; {data.payment.ref}
-                  </p>
-                </div>
-                <p className={`${T_AMOUNT} shrink-0`}>₹{inr(t.total)}</p>
+              <div className="relative mt-2.5 flex items-center gap-3">
+                <span className="grid h-10 w-10 shrink-0 place-items-center bg-white/15">
+                  <Icon name="card" className="h-5 w-5" />
+                </span>
+                <p className={`${T_LABEL} min-w-0 truncate`}>
+                  {data.payment.mode} &ndash; {data.payment.ref}
+                </p>
               </div>
             </div>
           </div>
@@ -1633,7 +1674,7 @@ function ReceiptView({
             </div>
           </section>
 
-          {/* ---------- 9. Store details ---------- */}
+          {/* ---------- 9. Store details (contact and tax info expand / collapse) ---------- */}
           <section aria-label="Store details" className={`${sheet} text-[var(--nt-ink)]`}>
             <Ruler />
             <div className="p-5">
@@ -1661,36 +1702,63 @@ function ReceiptView({
                 </a>
               </div>
 
-              <div className="mt-4 border border-[var(--nt-line)]">
-                <a href={`mailto:${store.email}`} className="flex items-center justify-between gap-3 border-b border-[var(--nt-line)] p-3.5 active:bg-[var(--nt-mist)]">
-                  <span className="flex min-w-0 items-center gap-3">
-                    <Icon name="mail" className="h-4 w-4 shrink-0 text-[var(--nt-navy)]" />
-                    <span className="min-w-0">
-                      <span className={`block ${T_SMALL} text-[var(--nt-slate)]`}>Email support</span>
-                      <span className={`${T_LABEL} block truncate`}>{store.email}</span>
-                    </span>
-                  </span>
-                  <Icon name="arrow" className="h-4 w-4 shrink-0 text-[var(--nt-navy)]" />
-                </a>
+              <button
+                type="button"
+                onClick={() => setContactOpen((o) => !o)}
+                aria-expanded={contactOpen}
+                aria-controls={contactId}
+                className={`mt-4 flex w-full items-center justify-between gap-2 border-t border-[var(--nt-line)] pt-4 text-left ${focusRing}`}
+              >
+                <span className={`${T_LABEL} text-[var(--nt-navy)]`}>{contactOpen ? "Hide contact and tax info" : "View contact and tax info"}</span>
+                <span className="grid h-8 w-8 shrink-0 place-items-center border border-[var(--nt-navy)] text-[var(--nt-navy)]">
+                  <Icon name="chevron" className={`h-4 w-4 transition-transform duration-300 ${contactOpen ? "rotate-180" : ""}`} />
+                </span>
+              </button>
 
-                <a href={`tel:${store.phone}`} className="flex items-center justify-between gap-3 border-b border-[var(--nt-line)] p-3.5 active:bg-[var(--nt-mist)]">
-                  <span className="flex min-w-0 items-center gap-3">
-                    <Icon name="phone" className="h-4 w-4 shrink-0 text-[var(--nt-navy)]" />
-                    <span className="min-w-0">
-                      <span className={`block ${T_SMALL} text-[var(--nt-slate)]`}>Store phone</span>
-                      <span className={`${T_LABEL} block truncate tabular-nums`}>{store.phone}</span>
+              <Collapse open={contactOpen} id={contactId}>
+                <div className="mt-3 border border-[var(--nt-line)]">
+                  <a href={`mailto:${store.email}`} className="flex items-center justify-between gap-3 border-b border-[var(--nt-line)] p-3.5 active:bg-[var(--nt-mist)]">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <Icon name="mail" className="h-4 w-4 shrink-0 text-[var(--nt-navy)]" />
+                      <span className="min-w-0">
+                        <span className={`block ${T_SMALL} text-[var(--nt-slate)]`}>Email support</span>
+                        <span className={`${T_LABEL} block truncate`}>{store.email}</span>
+                      </span>
                     </span>
-                  </span>
-                  <Icon name="arrow" className="h-4 w-4 shrink-0 text-[var(--nt-navy)]" />
-                </a>
+                    <Icon name="arrow" className="h-4 w-4 shrink-0 text-[var(--nt-navy)]" />
+                  </a>
 
-                <div className="p-3.5">
-                  <p className={`flex items-center gap-1.5 ${T_SMALL} text-[var(--nt-slate)]`}>
-                    <Icon name="user" className="h-3.5 w-3.5" /> Sales associate
-                  </p>
-                  <p className={`${T_LABEL} mt-1`}>{store.associate}</p>
+                  <a href={`tel:${store.phone}`} className="flex items-center justify-between gap-3 border-b border-[var(--nt-line)] p-3.5 active:bg-[var(--nt-mist)]">
+                    <span className="flex min-w-0 items-center gap-3">
+                      <Icon name="phone" className="h-4 w-4 shrink-0 text-[var(--nt-navy)]" />
+                      <span className="min-w-0">
+                        <span className={`block ${T_SMALL} text-[var(--nt-slate)]`}>Store phone</span>
+                        <span className={`${T_LABEL} block truncate tabular-nums`}>{store.phone}</span>
+                      </span>
+                    </span>
+                    <Icon name="arrow" className="h-4 w-4 shrink-0 text-[var(--nt-navy)]" />
+                  </a>
+
+                  <div className={`grid divide-x divide-[var(--nt-line)] ${store.gstin ? "grid-cols-2" : "grid-cols-1"}`}>
+                    <div className="p-3.5">
+                      <p className={`flex items-center gap-1.5 ${T_SMALL} text-[var(--nt-slate)]`}>
+                        <Icon name="user" className="h-3.5 w-3.5" /> Sales associate
+                      </p>
+                      <p className={`${T_LABEL} mt-1`}>{store.associate}</p>
+                    </div>
+                    {store.gstin && (
+                      <div className="min-w-0 p-3.5">
+                        <p className={`flex items-center gap-1.5 ${T_SMALL} text-[var(--nt-slate)]`}>
+                          <Icon name="tax" className="h-3.5 w-3.5" /> GSTIN
+                        </p>
+                        <p className={`${T_LABEL} mt-1 truncate tabular-nums`} title={store.gstin}>
+                          {store.gstin}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              </Collapse>
             </div>
           </section>
         </div>
